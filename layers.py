@@ -7,6 +7,7 @@ from torch_scatter import scatter_add
 from torch_sparse import SparseTensor, matmul, fill_diag, sum, mul_
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils import add_remaining_self_loops
+
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 
 from torch_geometric.nn.inits import glorot, zeros
@@ -108,7 +109,7 @@ class resGCNConv(MessagePassing):
         self._cached_edge_index = None
         self._cached_adj_t = None
 
-    def forward(self, x: Tensor, edge_index: Adj, alpha, gamma, h0, beta,
+    def forward(self, x: Tensor, edge_index: Adj, alpha, gamma, h0, beta, lx,
                 edge_weight: OptTensor = None) -> Tensor:
         """"""
 
@@ -136,17 +137,13 @@ class resGCNConv(MessagePassing):
                     edge_index = cache
 
         support = alpha * x + beta * torch.matmul(x, self.weight1)
-        # support = alpha * x + (1 - alpha) * torch.matmul(x, self.weight1)
-        # support = (1 - beta) * (1 - alpha) * x + beta * (1 - alpha) * torch.matmul(x, self.weight1)
-        # initial = alpha * h0 + beta * torch.matmul(h0, self.weight2)  # 0.8390
-        # initial = gamma * h0
 
-        # initial = (1 - alpha) * h0
-        initial = (1 - beta) * h0  # H0 is more important when layers are deeper
-        # initial = (1 - beta) * alpha * h0 + alpha * beta * torch.matmul(h0, self.weight2)
+        reshp = torch.matmul(lx, self.weight2)
+
+        initial = (1 - beta) * h0  # H0 is more important when layers are deep
 
         # propagate_type: (x: Tensor, edge_weight: OptTensor)
-        out = self.propagate(edge_index, x=support, edge_weight=edge_weight, size=None) + initial
+        out = self.propagate(edge_index, x=support, edge_weight=edge_weight, size=None) + initial + (beta) * reshp
 
         return out
 
